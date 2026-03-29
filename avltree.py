@@ -65,13 +65,14 @@ def AVLInsertHelper(self, node, value):
         return node
 
 def searchHelper(node, value):
-    if not node:
-        return False
-    if value == node.value:
-        return True
-    if value < node.value:
-        return searchHelper(node.left, value)
-    return searchHelper(node.right, value)
+    while node is not None:
+        if value < node.value:
+            node = node.left
+        elif value > node.value:
+            node = node.right
+        else:
+            return True
+    return False
 
 class AVLTree:
     def __init__(self):
