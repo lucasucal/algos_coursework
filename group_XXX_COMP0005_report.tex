@@ -1,6 +1,7 @@
 \documentclass[12pt]{article}
 
 \usepackage[left=2.5cm,top=2.5cm,right=2.5cm,bottom=2.5cm]{geometry}
+\usepackage[numbers]{natbib}
 
 %% Macros and packages go here
 
@@ -37,7 +38,34 @@
 \section{Comparative assessment}
 \emph{(Section 3 should be about one to one-and-a-half pages in length.)}
 
+\subsection*{Insertion performance}
 
+Across all dataset sizes and insertion orders, the AVL Tree consistently incurs the highest per-element insertion cost among the three structures. This is a direct consequence of its strict height-balance invariant: after every insertion, the tree checks and potentially corrects the balance factor at every ancestor node, performing single or double rotations as needed. While each rotation is O(1), the frequency of rebalancing under adversarial input orders (sorted and reverse-sorted) makes the constant factor measurably larger than its competitors.
+
+The LLRB BST sits in the middle ground. Its insertion cost is lower than the AVL Tree because the left-leaning constraint allows deferred rebalancing --- colour flips and rotations propagate upward only as far as necessary \cite{sedgewick2011}. The 2-3 Tree incurs the lowest rotation overhead conceptually, but its node-splitting and key-promotion mechanism introduces memory allocation and pointer management costs that become visible at large $n$, particularly under sorted insertion where splits cascade upward more frequently.
+
+Under random insertion order, all three structures perform closest to their theoretical O($\log n$) expectation, with per-element times remaining approximately flat as $n$ grows from 1,000 to 100,000. The greatest divergence between structures appears under sorted and reverse-sorted insertion, where the cost of maintaining balance is highest.
+
+\subsection*{Search performance}
+
+For search, the ordering reverses. The AVL Tree's stricter height invariant guarantees a shallower tree than the LLRB BST in the worst case (AVL height $\leq 1.44 \log_2 n$ versus LLRB height $\leq 2 \log_2 n$ \cite{sedgewick2011}), which translates to fewer node comparisons per lookup. This advantage is most pronounced at large $n$ where the height difference is greatest. The 2-3 Tree, despite perfect balance, requires comparing against up to two keys per node, which can offset its height advantage depending on the cost of string comparison.
+
+Hit ratio has a measurable effect: at low hit ratios (0.2), searches are more likely to traverse to a leaf before returning false, increasing average path length. At high hit ratios (0.8), successful searches terminate earlier on average. This effect is consistent across all three structures and does not significantly change their relative ordering.
+
+\subsection*{Effect of string length}
+
+Longer strings (50--100 characters) increase the cost of each node comparison, amplifying any difference in the number of comparisons performed per operation. Under long strings, the AVL Tree's search advantage widens, as fewer node visits directly translates to fewer expensive string comparisons. Insertion costs increase roughly proportionally across all three structures, since string comparison dominates over pointer manipulation at this length.
+
+\subsection*{Practical applications}
+
+The AVL Tree is best suited to \textbf{read-heavy, in-memory workloads} where lookups vastly outnumber insertions. Its strict balance guarantees the shallowest possible tree, minimising search latency \cite{sedgewick2011}. This property makes it well suited to symbol tables in compilers and interpreters, where identifiers are inserted once during parsing but looked up repeatedly during code generation \cite{aho2006}. It is also used in operating system kernels for memory management structures that require fast lookup with infrequent modification; the Linux kernel, for instance, uses AVL-like balanced trees in its virtual memory subsystem \cite{bovet2005}.
+
+The LLRB BST, introduced by Sedgewick as a simplification of the full red-black tree \cite{sedgewick2008}, offers the best \textbf{general-purpose balance} between insert and search cost. Its simpler implementation --- fewer cases to handle than a standard red-black tree --- reduces the likelihood of implementation error while preserving the same asymptotic guarantees. Sedgewick and Wayne recommend it as the default ordered symbol table implementation for workloads where both operations occur with similar frequency \cite{sedgewick2011}. Red-black trees (of which LLRB is a variant) underpin sorted container implementations in several major standard libraries, including Java's \texttt{TreeMap} and C++'s \texttt{std::map} \cite{cormen2022}.
+
+The 2-3 Tree, while less commonly used directly in practice, is the conceptual foundation of \textbf{B-trees} \cite{sedgewick2011}, which underpin most relational database index structures and file systems \cite{bayer1972}. Its perfect balance and multi-key nodes make it well suited to disk-based storage where minimising tree height reduces I/O operations \cite{graefe2011}. In a purely in-memory context, the overhead of managing variable-size nodes makes it less competitive than AVL or LLRB BST for the string workloads tested here; however, its architectural descendants (B+ trees) remain the dominant index structure in systems such as MySQL InnoDB and PostgreSQL \cite{graefe2011}.
+
+\bigskip
+\noindent In summary, the choice of structure depends on the workload: AVL for search-dominant tasks, LLRB BST for balanced general-purpose use, and 2-3/B-tree variants for disk-backed or high-fanout storage systems.
 
 \section{Team contributions}
 \emph{(Section 4 should be no more than half a page in length. Express work share as a percentage totalling to $100$: for example, four students who all contributed equally should receive $25\%$.)}
