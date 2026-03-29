@@ -1,184 +1,231 @@
+from abc import ABC, abstractmethod
+
+
+# =============================================================================
+# Abstract Interface (mirrors the DO NOT MODIFY cell in the notebook)
+# =============================================================================
+
+class AbstractSearchInterface(ABC):
+    """Abstract class to support search/insert operations."""
+
+    @abstractmethod
+    def insertElement(self, element):
+        """
+        Insert an element in the search tree.
+            Parameters:
+                element: string to be inserted (str)
+            Returns:
+                True after successful insertion, False if element already present (bool)
+        """
+        pass
+
+    @abstractmethod
+    def searchElement(self, element):
+        """
+        Search for an element in the search tree.
+            Parameters:
+                element: string to be searched (str)
+            Returns:
+                True if element is found, False otherwise (bool)
+        """
+        pass
+
+
+# =============================================================================
+# Auxiliary data structure and helper code
+# (mirrors the auxiliary cell in the notebook)
+# =============================================================================
+
 RED = True
 BLACK = False
 
 
-class Node:
+class LLRBNode:
+    """A single node in the LLRB BST, carrying a key, a value, and a link colour."""
+
     def __init__(self, key, value):
         self.key = key
         self.value = value
         self.left = None
         self.right = None
-        self.color = RED  # new nodes are always red
+        self.color = RED  # new nodes are always inserted as red
 
 
-class LLRBBST:
+def _is_red(node):
+    """Return True if node's incoming link is red; None links are black."""
+    if node is None:
+        return False
+    return node.color == RED
+
+
+def _rotate_left(h):
+    """
+    Rotate h left to eliminate a right-leaning red link.
+
+    Before:  h ─red─> x        After:  x
+                      / \\             / \\
+                     b   c         red h   c
+                                   / \\
+                                  a   b
+
+    Operations:
+      1. x (h.right) becomes the new subtree root.
+      2. x's left subtree is transferred to h as its new right child.
+      3. h becomes x's left child.
+      4. x inherits h's original colour (subtree colour unchanged externally).
+      5. h is coloured RED (link from x down to h is now red).
+
+    Returns the new subtree root x.
+    """
+    x = h.right
+    h.right = x.left
+    x.left = h
+    x.color = h.color
+    h.color = RED
+    return x
+
+
+def _rotate_right(h):
+    """
+    Rotate h right to eliminate two consecutive left-leaning red links.
+
+    Before:     h              After:  x
+               / \\                   / \\
+           red x   c               a   red h
+           / \\                         / \\
+          a   b                        b   c
+
+    Operations:
+      1. x (h.left) becomes the new subtree root.
+      2. x's right subtree is transferred to h as its new left child.
+      3. h becomes x's right child.
+      4. x inherits h's original colour (subtree colour unchanged externally).
+      5. h is coloured RED (link from x down to h is now red).
+
+    Returns the new subtree root x.
+    """
+    x = h.left
+    h.left = x.right
+    x.right = h
+    x.color = h.color
+    h.color = RED
+    return x
+
+
+def _flip_colors(h):
+    """
+    Flip colours of h and both children to split a temporary 4-node.
+
+    Operations:
+      1. h is coloured RED  — propagates the carry up to h's parent.
+      2. h.left  is coloured BLACK.
+      3. h.right is coloured BLACK.
+
+    Modifies nodes in place; returns nothing.
+    """
+    h.color = RED
+    h.left.color = BLACK
+    h.right.color = BLACK
+
+
+def _llrb_put(h, key, value):
+    """
+    Recursive insert into the subtree rooted at h.
+
+    Going DOWN:
+      - h is None          → create and return a new red LLRBNode.
+      - key < h.key        → recurse left.
+      - key > h.key        → recurse right.
+      - key == h.key       → update value in place (no structural change).
+
+    Coming BACK UP (three fix-up checks in order):
+      1. Right child red, left child not red  → rotate_left  (no right-leaning reds).
+      2. Left child red and left-left red     → rotate_right (no two consecutive reds).
+      3. Both children red                   → flip_colors  (split 4-node).
+
+    Returns the (possibly new) subtree root after fix-ups.
+    """
+    if h is None:
+        return LLRBNode(key, value)
+
+    if key < h.key:
+        h.left = _llrb_put(h.left, key, value)
+    elif key > h.key:
+        h.right = _llrb_put(h.right, key, value)
+    else:
+        h.value = value  # duplicate key: update value
+
+    if _is_red(h.right) and not _is_red(h.left):
+        h = _rotate_left(h)
+    if _is_red(h.left) and _is_red(h.left.left):
+        h = _rotate_right(h)
+    if _is_red(h.left) and _is_red(h.right):
+        _flip_colors(h)
+
+    return h
+
+
+def _llrb_contains(root, key):
+    """
+    Iterative BST search (colour is irrelevant for lookup).
+
+    Traversal:
+      - key < node.key → go left.
+      - key > node.key → go right.
+      - key == node.key → found; return True.
+      - node is None   → exhausted; return False.
+
+    Returns True if key exists in the tree, False otherwise.
+    """
+    node = root
+    while node is not None:
+        if key < node.key:
+            node = node.left
+        elif key > node.key:
+            node = node.right
+        else:
+            return True
+    return False
+
+
+# =============================================================================
+# LLRB BST API
+# (mirrors the LLRB implementation cell in the notebook)
+# =============================================================================
+
+class LLRBBST(AbstractSearchInterface):
+    """Left-Leaning Red-Black BST implementing AbstractSearchInterface."""
+
     def __init__(self):
         self.root = None
 
-    # --- helper predicates ---
-
-    def _is_red(self, node):
+    def insertElement(self, element):
         """
-        Checks whether a given node's link is red.
-        Returns False for None nodes (null links are treated as black).
-        Returns True if node.color == RED, False otherwise.
-        """
-        if node is None:
-            return False
-        return node.color == RED
-
-    # --- rotations and colour flip ---
-
-    def _rotate_left(self, h):
-        """
-        Rotates node h left to fix a right-leaning red link.
-
-        Before:          After:
-            h               x
-           / \red           / \
-          a   x     -->  red h   c
-             / \          / \
-            b   c        a   b
+        Insert element into the tree.
 
         Operations:
-          1. x becomes the new root of this subtree (was h.right)
-          2. x's left subtree is handed off to h as its new right child
-          3. h becomes x's left child
-          4. x inherits h's original colour so the subtree colour is unchanged
-          5. h is coloured RED (the link from x down to h is now red)
+          1. Check for duplicate via _llrb_contains — leave inserted=False if found.
+          2. Otherwise delegate to _llrb_put to insert and restore LLRB invariants.
+          3. Force root to BLACK (root link is always black).
 
-        Returns the new subtree root x.
+        Returns True on successful insertion, False if element was already present.
         """
-        x = h.right
-        h.right = x.left
-        x.left = h
-        x.color = h.color
-        h.color = RED
-        return x
+        inserted = False
+        if not _llrb_contains(self.root, element):
+            self.root = _llrb_put(self.root, element, None)
+            self.root.color = BLACK
+            inserted = True
+        return inserted
 
-    def _rotate_right(self, h):
+    def searchElement(self, element):
         """
-        Rotates node h right to fix two consecutive left-leaning red links.
-
-        Before:          After:
-              h               x
-             / \            /   \
-           red x   c  --> a     red h
-           / \                   / \
-          a   b                 b   c
+        Search for element in the tree.
 
         Operations:
-          1. x becomes the new root of this subtree (was h.left)
-          2. x's right subtree is handed off to h as its new left child
-          3. h becomes x's right child
-          4. x inherits h's original colour so the subtree colour is unchanged
-          5. h is coloured RED (the link from x down to h is now red)
+          Delegates to _llrb_contains for a standard iterative BST traversal.
 
-        Returns the new subtree root x.
+        Returns True if element is found, False otherwise.
         """
-        x = h.left
-        h.left = x.right
-        x.right = h
-        x.color = h.color
-        h.color = RED
-        return x
-
-    def _flip_colors(self, h):
-        """
-        Flips the colours of node h and both its children.
-        Used when both children are red (a temporary 4-node that must be split).
-
-        Operations:
-          1. h is coloured RED  — passes the "carry" upward to h's parent
-          2. h.left  is coloured BLACK
-          3. h.right is coloured BLACK
-
-        Returns nothing; modifies nodes in place.
-        """
-        h.color = RED
-        h.left.color = BLACK
-        h.right.color = BLACK
-
-    # --- put ---
-
-    def put(self, key, value=None):
-        """
-        Public insert/update method.
-
-        Operations:
-          1. Delegates to the recursive _put helper to find the correct position
-             and perform any necessary fix-ups on the way back up.
-          2. Forces the root to BLACK after every insertion (LLRB invariant:
-             the root link is always black).
-
-        Returns nothing.
-        """
-        self.root = self._put(self.root, key, value)
-        self.root.color = BLACK
-
-    def _put(self, h, key, value):
-        """
-        Recursive helper that inserts (key, value) into the subtree rooted at h
-        and restores the three LLRB invariants on the way back up.
-
-        Operations — going DOWN the tree:
-          1. Base case: h is None  → create and return a new red Node.
-          2. key < h.key           → recurse into the left subtree.
-          3. key > h.key           → recurse into the right subtree.
-          4. key == h.key          → key already exists; update its value in place.
-
-        Fix-up on the way BACK UP (three cases checked in order):
-          1. Right child is red AND left child is not red
-               → rotate_left(h)  — eliminates a right-leaning red link.
-          2. Left child is red AND left-left grandchild is also red
-               → rotate_right(h) — eliminates two consecutive red links on the left.
-          3. Both children are red
-               → flip_colors(h)  — splits the 4-node and pushes the carry upward.
-
-        Returns the (possibly new) root of this subtree after fix-ups.
-        """
-        if h is None:
-            return Node(key, value)
-
-        if key < h.key:
-            h.left = self._put(h.left, key, value)
-        elif key > h.key:
-            h.right = self._put(h.right, key, value)
-        else:
-            h.value = value  # update value for existing key
-
-        # fix-up: maintain LLRB invariants on the way back up
-        if self._is_red(h.right) and not self._is_red(h.left):
-            h = self._rotate_left(h)
-        if self._is_red(h.left) and self._is_red(h.left.left):
-            h = self._rotate_right(h)
-        if self._is_red(h.left) and self._is_red(h.right):
-            self._flip_colors(h)
-
-        return h
-
-    # --- get ---
-
-    def get(self, key):
-        """
-        Searches for key in the tree using standard BST traversal
-        (colour is irrelevant for search).
-
-        Operations — iterative, starting from the root:
-          1. key < node.key → move to the left child.
-          2. key > node.key → move to the right child.
-          3. key == node.key → key found; stop.
-          4. node is None    → key not present; stop.
-
-        Returns the value associated with key if found, or None if the key
-        does not exist in the tree.
-        """
-        node = self.root
-        while node is not None:
-            if key < node.key:
-                node = node.left
-            elif key > node.key:
-                node = node.right
-            else:
-                return node.value
-        return None
+        found = False
+        found = _llrb_contains(self.root, element)
+        return found
